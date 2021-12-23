@@ -61,10 +61,10 @@ func (srv *Server) waitdowconn(ch chan net.Conn) {
 		close(ch)
 		return
 	}
-	level.Debug(srv.logger).Log("msg", "waitdowconn start", "Addr", ln.Addr())
 
 	var tempDelay time.Duration
 	for {
+		level.Debug(srv.logger).Log("msg", "waitdowconn wait connect", "Addr", ln.Addr())
 		conn, err := ln.Accept()
 
 		if err != nil {
@@ -127,7 +127,7 @@ func (srv *Server) connect() bool {
 	// 启动主链路消息接收
 	srv.upconn = conn
 	srv.login()
-	safego(func() { srv.receive(srv.upconn) }, srv.logger, "upconn receive panic")
+	safego(func() { srv.receive(srv.upconn, "upconn") }, srv.logger, "upconn receive panic")
 
 	// 启动消息处理
 	safego(func() { defer srv.Shutdown(); srv.handle() }, srv.logger, "handle panic")
@@ -144,11 +144,12 @@ func (srv *Server) connect() bool {
 	}
 
 	srv.downconn = conn
-	safego(func() { srv.receive(srv.downconn) }, srv.logger, "downconn receive panic")
+	safego(func() { srv.receive(srv.downconn, "downconn") }, srv.logger, "downconn receive panic")
 	return true
 }
 
-func (srv *Server) receive(conn net.Conn) {
+func (srv *Server) receive(conn net.Conn, connname string) {
+	level.Debug(srv.logger).Log("msg", "start receive", "conn", connname)
 	dec := jt809.NewDecoder(conn)
 	for {
 		p, err := dec.Decode()
@@ -164,7 +165,7 @@ func (srv *Server) receive(conn net.Conn) {
 			}
 			break
 		}
-		level.Debug(srv.logger).Log("msg", "receive", "packet", p)
+		level.Debug(srv.logger).Log("msg", "receive", "conn", connname, "packet", p)
 		srv.receiveChan <- p
 	}
 }
@@ -275,6 +276,8 @@ func (srv *Server) handle() {
 				srv.onDownConnectReq(p.(*jt809.DownConnectReq))
 			case jt809.DOWN_LINKTEST_REQ:
 				srv.onDownLinkTestReq(p.(*jt809.DownLinkTestReq))
+			case jt809.UP_LINKTEST_RSP:
+				srv.onUpLinkTestRsp(p.(*jt809.UpLinkTestRsp))
 			default:
 				level.Info(srv.logger).Log(
 					"msg", "Server handle unsupport packet", "packet", p)
@@ -285,7 +288,7 @@ func (srv *Server) handle() {
 }
 
 func (srv *Server) onUpConnectRsp(p *jt809.UpConnectRsp) {
-	level.Info(srv.logger).Log("msg", "onUpConnectRsp", "packet", p)
+	level.Info(srv.logger).Log("msg", "login response", "packet", p)
 	testp := jt809.NewUpLinkTestReq()
 	// 如果添加了重连逻辑，注意不要启动多个 link test
 	safego(func() { srv.startLinktest(testp) }, srv.logger, "upconn linktest panic")
@@ -300,6 +303,9 @@ func (srv *Server) onDownConnectReq(p *jt809.DownConnectReq) {
 func (srv *Server) onDownLinkTestReq(p *jt809.DownLinkTestReq) {
 	rsp := jt809.NewDownLinkTestRsp()
 	srv.send(rsp)
+}
+
+func (srv *Server) onUpLinkTestRsp(p *jt809.UpLinkTestRsp) {
 }
 
 func safego(goroutine func(), logger log.Logger, errmsg string) {
