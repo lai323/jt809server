@@ -102,6 +102,15 @@ func (srv *Server) waitdowconn(ch chan net.Conn) {
 	}
 }
 
+func (srv *Server) login() {
+	req := jt809.NewUpConnectReq()
+	req.UserID = srv.UserID
+	req.Password = jt809.FixedLengthString(srv.Password, 8)
+	req.DownLinkIP = jt809.FixedLengthString(srv.DownLinkIP, 32)
+	req.DownLinkPort = srv.DownLinkPort
+	srv.send(req)
+}
+
 func (srv *Server) connect() bool {
 	// 等待建立从链路
 	ch := make(chan net.Conn)
@@ -117,6 +126,7 @@ func (srv *Server) connect() bool {
 
 	// 启动主链路消息接收
 	srv.upconn = conn
+	srv.login()
 	safego(func() { srv.receive(srv.upconn) }, srv.logger, "upconn receive panic")
 
 	// 启动消息处理
@@ -262,6 +272,8 @@ func (srv *Server) handle() {
 				srv.onUpConnectRsp(p.(*jt809.UpConnectRsp))
 			case jt809.DOWN_CONNECT_REQ:
 				srv.onDownConnectReq(p.(*jt809.DownConnectReq))
+			case jt809.DOWN_LINKTEST_REQ:
+				srv.onDownLinkTestReq(p.(*jt809.DownLinkTestReq))
 			default:
 				level.Info(srv.logger).Log(
 					"msg", "Server handle unsupport packet", "packet", p)
@@ -281,6 +293,11 @@ func (srv *Server) onUpConnectRsp(p *jt809.UpConnectRsp) {
 func (srv *Server) onDownConnectReq(p *jt809.DownConnectReq) {
 	rsp := jt809.NewDownConnectRsp()
 	rsp.Result = 0
+	srv.send(rsp)
+}
+
+func (srv *Server) onDownLinkTestReq(p *jt809.DownLinkTestReq) {
+	rsp := jt809.NewDownLinkTestRsp()
 	srv.send(rsp)
 }
 
