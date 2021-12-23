@@ -117,18 +117,24 @@ func (srv *Server) connect() bool {
 
 	// 启动主链路消息接收
 	srv.upconn = conn
-	safego(func() { srv.receive(conn) }, srv.logger, "upconn receive panic")
+	safego(func() { srv.receive(srv.upconn) }, srv.logger, "upconn receive panic")
 
 	// 启动消息处理
 	safego(func() { defer srv.Shutdown(); srv.handle() }, srv.logger, "handle panic")
 
 	// 启动从链路消息接收
-	conn, ok := <-ch
-	if !ok {
+	var ok bool
+	select {
+	case conn, ok = <-ch:
+		if !ok {
+			return false
+		}
+	case <-srv.exitedChan:
 		return false
 	}
+
 	srv.downconn = conn
-	safego(func() { srv.receive(conn) }, srv.logger, "downconn receive panic")
+	safego(func() { srv.receive(srv.downconn) }, srv.logger, "downconn receive panic")
 	return true
 }
 
