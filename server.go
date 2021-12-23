@@ -164,7 +164,7 @@ func (srv *Server) receive(conn net.Conn) {
 			}
 			break
 		}
-		level.Debug(srv.logger).Log("msg", "Server receive packet", "packet", p)
+		level.Debug(srv.logger).Log("msg", "receive", "packet", p)
 		srv.receiveChan <- p
 	}
 }
@@ -221,6 +221,7 @@ func (srv *Server) send(p jt809.Packet) {
 	if err != nil {
 		level.Error(srv.logger).Log("msg", "Server send Encode", "packet", p)
 	}
+	level.Debug(srv.logger).Log("msg", "send", "packet", p)
 }
 
 func (srv *Server) Serve() error {

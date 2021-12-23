@@ -41,4 +41,5 @@ func main() {
 
 	waitInterrupt(srv)
 	<-done
+	level.Info(logger).Log("msg", "server exit")
 }
