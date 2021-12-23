@@ -288,9 +288,11 @@ func (srv *Server) handle() {
 }
 
 func (srv *Server) onUpConnectRsp(p *jt809.UpConnectRsp) {
-	level.Info(srv.logger).Log("msg", "login response", "packet", p)
-	testp := jt809.NewUpLinkTestReq()
+	level.Info(srv.logger).Log("msg", "login response",
+		"Result", p.Result, "VerifyCode", p.VerifyCode)
+
 	// 如果添加了重连逻辑，注意不要启动多个 link test
+	testp := jt809.NewUpLinkTestReq()
 	safego(func() { srv.startLinktest(testp) }, srv.logger, "upconn linktest panic")
 }
 
