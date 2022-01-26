@@ -1,11 +1,18 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
+	"time"
 
 	"git.rundle.cn/liuyaqi/jt809server"
+	"git.rundle.cn/liuyaqi/jt809server/jt809"
 	"git.rundle.cn/liuyaqi/jt809server/log"
 	"github.com/go-kit/log/level"
 )
@@ -15,6 +22,16 @@ func waitInterrupt(srv *jt809server.Server) {
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	<-c
 	srv.Shutdown()
+}
+
+type Req struct {
+	Lon       uint32
+	Lat       uint32
+	Vec1      uint16
+	Vec2      uint16
+	Vec3      uint32
+	Direction uint16
+	Altitude  uint16
 }
 
 func main() {
@@ -28,6 +45,61 @@ func main() {
 	srv.UpLinkPort = 8085
 	srv.DownLinkIP = "121.89.198.118"
 	srv.DownLinkPort = 8090
+
+	// 链接到监管平台后启动 http 服务接收定位，推送监管平台
+	srv.OnConnect = func() {
+		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					level.Error(logger).Log(
+						"msg", "simulate panic",
+						"error", err,
+						"stack", debug.Stack())
+				}
+			}()
+			level.Debug(logger).Log("msg", "start simulate")
+			// for {
+			// 	simulate(srv, "测A12345", jt809.PlateColorYellow, time.Second*5)
+			// }
+
+			http.HandleFunc("/bar", func(w http.ResponseWriter, r *http.Request) {
+				s, err := ioutil.ReadAll(r.Body)
+				if err != nil {
+					level.Error(logger).Log("msg", "HandleFunc ReadAll", err)
+				}
+				req := Req{}
+				err = json.Unmarshal(s, &req)
+				if err != nil {
+					level.Error(logger).Log("msg", "HandleFunc Unmarshal", err)
+				}
+				level.Debug(logger).Log("msg", "HandleFunc", "req", fmt.Sprintf("%#v", req))
+
+				exgmsg := jt809.NewUpExgMsg()
+				exgmsg.VehicleNo = jt809.FixedLengthString("测A12345", 21, true)
+				exgmsg.VehicleColor = jt809.PlateColorYellow
+				loc := jt809.NewUpExgMsgRealLocation()
+				loc.Encrypt = 0
+				loc.State = &jt809.LocationStatus{ACC: true, Location: true}
+				loc.Alarm = &jt809.LocationAlarm{}
+
+				now := time.Now()
+				loc.Date = jt809.GNSSDataDate(now)
+				loc.Time = jt809.GNSSDataTime(now)
+				loc.Lon = req.Lon
+				loc.Lat = req.Lat
+				loc.Vec1 = req.Vec1 / 10
+				loc.Vec2 = req.Vec2 / 10
+				loc.Vec3 = req.Vec3 / 10
+				loc.Direction = req.Direction
+				loc.Altitude = req.Altitude
+				exgmsg.SetSubPacket(loc)
+				srv.UpRealLocation(exgmsg)
+			})
+
+			err := http.ListenAndServe(":80", nil)
+			level.Error(logger).Log("msg", "http server", "error", err)
+		}()
+	}
 
 	done := make(chan struct{})
 	go func() {
