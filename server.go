@@ -30,6 +30,8 @@ type Server struct {
 	sngen       *jt809.SerialNoGenerater
 	mtx         sync.Mutex
 	exitedChan  chan struct{}
+
+	OnConnect func()
 }
 
 func NewServer(logger log.Logger) *Server {
@@ -39,6 +41,10 @@ func NewServer(logger log.Logger) *Server {
 		sngen:       jt809.NewSerialNoGenerater(),
 		exitedChan:  make(chan struct{}),
 	}
+}
+
+func (srv *Server) UpRealLocation(loc *jt809.UpExgMsg) {
+	srv.send(loc)
 }
 
 func (srv *Server) startLinktest(p jt809.Packet) {
@@ -175,6 +181,7 @@ func (srv *Server) send(p jt809.Packet) {
 	defer srv.mtx.Unlock()
 	lt := p.LinkType()
 	var conn net.Conn = nil
+	var connname string
 
 	if lt == jt809.DownLinkOnly && srv.downconn == nil {
 		level.Error(srv.logger).Log(
@@ -188,21 +195,27 @@ func (srv *Server) send(p jt809.Packet) {
 	}
 
 	if lt == jt809.DownLinkOnly {
+		connname = "downconn"
 		conn = srv.downconn
 	}
 	if lt == jt809.UpLinkOnly {
+		connname = "upconn"
 		conn = srv.upconn
 	}
 
 	if lt == jt809.DownLink {
+		connname = "downconn"
 		conn = srv.downconn
 		if conn == nil {
+			connname = "upconn"
 			conn = srv.upconn
 		}
 	}
 	if lt == jt809.UpLink {
+		connname = "upconn"
 		conn = srv.upconn
 		if conn == nil {
+			connname = "downconn"
 			conn = srv.downconn
 		}
 	}
@@ -222,7 +235,7 @@ func (srv *Server) send(p jt809.Packet) {
 	if err != nil {
 		level.Error(srv.logger).Log("msg", "Server send Encode", "packet", p)
 	}
-	level.Debug(srv.logger).Log("msg", "send", "packet", p)
+	level.Debug(srv.logger).Log("msg", "send", "conn", connname, "packet", p)
 }
 
 func (srv *Server) Serve() error {
@@ -232,6 +245,20 @@ func (srv *Server) Serve() error {
 	if !ok {
 		srv.Shutdown()
 		return nil
+	}
+
+	if srv.OnConnect != nil {
+		func() {
+			defer func() {
+				if err := recover(); err != nil {
+					level.Error(srv.logger).Log(
+						"msg", "server OnConnect panic",
+						"error", err,
+						"stack", debug.Stack())
+				}
+			}()
+			srv.OnConnect()
+		}()
 	}
 
 	<-srv.exitedChan
