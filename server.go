@@ -111,8 +111,8 @@ func (srv *Server) waitdowconn(ch chan net.Conn) {
 func (srv *Server) login() {
 	req := jt809.NewUpConnectReq()
 	req.UserID = srv.UserID
-	req.Password = jt809.FixedLengthString(srv.Password, 8)
-	req.DownLinkIP = jt809.FixedLengthString(srv.DownLinkIP, 32)
+	req.Password = jt809.FixedLengthString(srv.Password, 8, false)
+	req.DownLinkIP = jt809.FixedLengthString(srv.DownLinkIP, 32, false)
 	req.DownLinkPort = srv.DownLinkPort
 	srv.send(req)
 }

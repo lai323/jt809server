@@ -3,6 +3,8 @@ package jt809
 import (
 	"fmt"
 	"sync"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 // 链路管理类
@@ -27,6 +29,21 @@ const (
 
 // 信息统计类
 const DOWN_TOTAL_RECV_BACK_MSG uint16 = 0x9101 // 接收定位信息数量通知消息 从链路
+
+//车辆动态信息交换类
+const (
+	UP_EXG_MSG               uint16 = 0x1200 // 主链路动态信息交换消息 主链路
+	UP_EXG_MSG_REAL_LOCATION uint16 = 0x1202 // 实时上传车辆定位信息 主链路
+)
+
+// 车牌颜色，按照 JT/T415-2006 中 5.4.12 的规定
+const (
+	PlateColorBlue   = 1
+	PlateColorYellow = 2
+	PlateColorBlack  = 3
+	PlateColorWhite  = 4
+	PlateColorOther  = 9 // 其他
+)
 
 // SerialNo 占用四个字节，为发送信息的序列号，用于接收方检测是否有信息的丢失。上级平台和下级平台按自己发送数据包的个数计数，互不影响。程序开始运行时等于零，发送第一帧数据时开始计数，到最大数后自动归零
 // Encrypt 用来区分报文是否进行加密，如果标识为1,则说明对后续相应业务的数据体采用 EncryptKey 对应的密钥进行加密处理。如果标识为0,则说明不进行加密处理
@@ -56,6 +73,20 @@ const (
 	DownLinkOnly LinkType = 4
 )
 
+type SubPacket interface {
+	String() string
+	SubType() uint16
+}
+
+type SubPacketSetter interface {
+	SubType() uint16
+	SetSubType(uint16)
+	SubLength() uint32
+	SetSubLength(uint32)
+	SubPacket() SubPacket
+	SetSubPacket(subpacket SubPacket)
+}
+
 type Packet interface {
 	String() string
 	LinkType() LinkType
@@ -63,12 +94,12 @@ type Packet interface {
 	SetHeader(Header)
 }
 
-type headerSeter struct {
+type headerSetter struct {
 	header Header
 }
 
-func newHeaderSeter(t uint16) *headerSeter {
-	return &headerSeter{
+func newHeaderSeter(t uint16) *headerSetter {
+	return &headerSetter{
 		header: Header{
 			Type:    t,
 			Version: []byte{1, 0, 0},
@@ -76,12 +107,28 @@ func newHeaderSeter(t uint16) *headerSeter {
 	}
 }
 
-func (seter *headerSeter) Header() *Header {
+func (seter *headerSetter) Header() *Header {
 	return &seter.header
 }
 
-func (seter *headerSeter) SetHeader(h Header) {
+func (seter *headerSetter) SetHeader(h Header) {
 	seter.header = h
+}
+
+type subPacketSetter struct {
+	subpacket SubPacket
+}
+
+func newSubPacketSeter() *subPacketSetter {
+	return &subPacketSetter{}
+}
+
+func (seter *subPacketSetter) SubPacket() SubPacket {
+	return seter.subpacket
+}
+
+func (seter *subPacketSetter) SetSubPacket(subpacket SubPacket) {
+	seter.subpacket = subpacket
 }
 
 var newPacketMap = map[uint16]func() Packet{
@@ -93,11 +140,24 @@ var newPacketMap = map[uint16]func() Packet{
 	DOWN_CONNECT_RSP:  func() Packet { return NewDownConnectRsp() },
 	DOWN_LINKTEST_REQ: func() Packet { return NewDownLinkTestReq() },
 	DOWN_LINKTEST_RSP: func() Packet { return NewDownLinkTestRsp() },
+	UP_EXG_MSG:        func() Packet { return NewUpExgMsg() },
 }
 
-func FixedLengthString(s string, length int) []byte {
+var newSubPacketMap = map[uint16]func() SubPacket{
+	UP_EXG_MSG_REAL_LOCATION: func() SubPacket { return NewUpExgMsgRealLocation() },
+}
+
+func FixedLengthString(s string, length int, gbk bool) []byte {
 	b := make([]byte, length)
-	copy(b, []byte(s))
+	if !gbk {
+		copy(b, []byte(s))
+		return b
+	}
+	gbkb, err := simplifiedchinese.GBK.NewEncoder().Bytes([]byte(s))
+	if err != nil {
+		panic(err)
+	}
+	copy(b, gbkb)
 	return b
 }
 

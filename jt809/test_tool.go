@@ -37,10 +37,12 @@ func testpacket(t *testing.T, subtest map[Packet][]byte) {
 		if !reflect.DeepEqual(dataRet, data) {
 			t.Error("Packet Marshal error", p, strings.ToUpper(hex.EncodeToString(data)), strings.ToUpper(hex.EncodeToString(dataRet)))
 		}
+		t.Log(p, strings.ToUpper(hex.EncodeToString(dataRet)))
 
 		packetRet := mustUnmarshal(data)
 		if !reflect.DeepEqual(packetRet, p) {
 			t.Error("Packet Marshal error", p, strings.ToUpper(hex.EncodeToString(data)), packetRet)
 		}
+		t.Log(strings.ToUpper(hex.EncodeToString(data)), packetRet)
 	}
 }

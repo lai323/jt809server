@@ -10,19 +10,19 @@ import "fmt"
 // 状态。
 // 从链路连接保持请求消息，数据体为空。
 type DownLinkTestReq struct {
-	*headerSeter
+	*headerSetter
 }
 
 func NewDownLinkTestReq() *DownLinkTestReq {
 	p := &DownLinkTestReq{}
-	p.headerSeter = newHeaderSeter(DOWN_LINKTEST_REQ)
+	p.headerSetter = newHeaderSeter(DOWN_LINKTEST_REQ)
 	return p
 }
 
-func (p *DownLinkTestReq) LinkType() LinkType {
+func (p DownLinkTestReq) LinkType() LinkType {
 	return DownLinkOnly
 }
 
-func (p *DownLinkTestReq) String() string {
+func (p DownLinkTestReq) String() string {
 	return fmt.Sprintf("DownLinkTestReq{Header:%s", p.Header())
 }

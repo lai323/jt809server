@@ -40,6 +40,14 @@ func (e *UnsupportPacketErr) Error() string {
 	return fmt.Sprintf("jt809 unsupport packet %#04x", e.Type)
 }
 
+type UnsupportSubPacketErr struct {
+	Type uint16
+}
+
+func (e *UnsupportSubPacketErr) Error() string {
+	return fmt.Sprintf("jt809 unsupport subpacket %#04x", e.Type)
+}
+
 type Decoder struct {
 	r *bufio.Reader
 }
@@ -83,6 +91,19 @@ func (c *Decoder) Decode() (p Packet, err error) {
 		return nil, fmt.Errorf("jt809 Decode Packet Unmarshal error: %s", err)
 	}
 	pkt.SetHeader(header)
+
+	if subSetter, ok := pkt.(SubPacketSetter); ok {
+		subnew := newSubPacketMap[subSetter.SubType()]
+		if subnew == nil {
+			return nil, &UnsupportSubPacketErr{Type: header.Type}
+		}
+		subpkt := subnew()
+		err = bytecodec.Unmarshal(pktbytes[len(pktbytes)-int(subSetter.SubLength()):], subpkt)
+		if err != nil {
+			return nil, fmt.Errorf("jt809 Decode SubPacket Unmarshal error: %s", err)
+		}
+		subSetter.SetSubPacket(subpkt)
+	}
 	return pkt, nil
 }
 
@@ -97,12 +118,29 @@ func NewEncoder(w io.Writer) *Encoder {
 }
 
 func (c *Encoder) Encode(p Packet) error {
-	pktbytes, err := bytecodec.Marshal(p)
+
+	var subpktBytes []byte
+	if subSetter, ok := p.(SubPacketSetter); ok {
+		subpkt := subSetter.SubPacket()
+		var err error
+		subpktBytes, err = bytecodec.Marshal(subpkt)
+		if err != nil {
+			if err != nil {
+				return fmt.Errorf("jt809 Encode SubPacket Marshal error: %s", err)
+			}
+		}
+		subSetter.SetSubType(subpkt.SubType())
+		subSetter.SetSubLength(uint32(len(subpktBytes)))
+	}
+
+	bodybytes, err := bytecodec.Marshal(p)
 	if err != nil {
 		if err != nil {
 			return fmt.Errorf("jt809 Encode Packet Marshal error: %s", err)
 		}
 	}
+	bodybytes = append(bodybytes, subpktBytes...)
+
 	header := p.Header()
 	if header.Encrypt == 1 {
 		var (
@@ -110,15 +148,15 @@ func (c *Encoder) Encode(p Packet) error {
 			IA1 uint32 = 20000000
 			IC1 uint32 = 20000000
 		)
-		Encrypt(M1, IA1, IC1, header.EncryptKey, pktbytes)
+		Encrypt(M1, IA1, IC1, header.EncryptKey, bodybytes)
 	}
 
-	header.Length = 1 + HeaderLength + uint32(len(pktbytes)) + 1 + 2
+	header.Length = 1 + HeaderLength + uint32(len(bodybytes)) + 1 + 2
 	headerbytes, err := bytecodec.Marshal(header)
 	if err != nil {
 		return fmt.Errorf("jt809 Encode Header Marshal error: %s", err)
 	}
-	pktbytes = append(headerbytes, pktbytes...)
+	pktbytes := append(headerbytes, bodybytes...)
 
 	sumbyte := make([]byte, 2)
 	binary.BigEndian.PutUint16(sumbyte, crc16.ChecksumCCITTFalse(pktbytes))
@@ -265,4 +303,25 @@ func Encrypt(M1, IA1, IC1, key uint32, data []byte) {
 		key = IA1*(key%M1) + IC1
 		data[i] = v ^ byte((key>>20)&0xff)
 	}
+}
+
+func BinToBoolSlice(bin uint64) (ret []bool) {
+	for i := 0; i < 64; i++ {
+		var mask uint64 = 1 << i
+		if bin&mask == mask {
+			ret = append(ret, true)
+			continue
+		}
+		ret = append(ret, false)
+	}
+	return ret
+}
+
+func BoolSliceToBin(bools []bool) (ret uint64) {
+	for i, b := range bools {
+		if b {
+			ret |= 1 << i
+		}
+	}
+	return ret
 }
