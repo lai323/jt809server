@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"git.rundle.cn/liuyaqi/jt809server"
-	"git.rundle.cn/liuyaqi/jt809server/jt809"
-	"git.rundle.cn/liuyaqi/jt809server/log"
+	"github.com/lai323/jt809server"
+	"github.com/lai323/jt809server/jt809"
+	"github.com/lai323/jt809server/log"
 	"github.com/go-kit/log/level"
 )
 
@@ -38,12 +38,13 @@ func main() {
 	logger := log.NewLogdevStdoutLogger(level.AllowDebug())
 	srv := jt809server.NewServer(logger)
 
-	srv.UserID = 501001
-	srv.Password = "501001"
-	srv.GNSSCenterID = 501001
-	srv.UpLinkIP = "121.36.37.154"
+	// 设置链接信息
+	srv.UserID = 1
+	srv.Password = "1"
+	srv.GNSSCenterID = 1
+	srv.UpLinkIP = "localhost"
 	srv.UpLinkPort = 8085
-	srv.DownLinkIP = "121.89.198.118"
+	srv.DownLinkIP = "localhost"
 	srv.DownLinkPort = 8090
 
 	// 链接到监管平台后启动 http 服务接收定位，推送监管平台

@@ -1,4 +1,4 @@
-module git.rundle.cn/liuyaqi/jt809server
+module github.com/lai323/jt809server
 
 go 1.14
 

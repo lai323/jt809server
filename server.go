@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"git.rundle.cn/liuyaqi/jt809server/jt809"
+	"github.com/lai323/jt809server/jt809"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 )
